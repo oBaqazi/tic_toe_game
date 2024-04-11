@@ -1,0 +1,42 @@
+version: '3.7'
+services:
+    app_node1:
+        image:
+        hostname: app_node1
+        depends_on:
+            - redis
+
+    app_node2:
+        image:
+        hostname: app_node2
+        depends_on:
+            - redis
+
+    app_node3:
+        image:
+        hostname: app_node3
+        depends_on:
+            - redis
+
+    redis:
+        image: redis
+        volumes:
+            - redisData:/data
+
+
+
+    nginx:
+        image: nginx:1.19.2-alpine
+        hostname: nginx
+        volumes:
+            - ./nginx.conf:/etc/nginx/nginx.conf:ro
+        ports:
+            - "80:80"
+            - "443:443"
+        depends_on:
+            - app_node1
+            - app_node2
+            - app_node3
+volumes:
+  redisData:
+    external: false
