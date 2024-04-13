@@ -1,0 +1,4 @@
+FROM python:3.7
+ADD gameServer.py .
+RUN pip install requests beautifulsoup4 python-dotenv redis
+CMD ["python","-u", "./gameServer.py"] 
