@@ -37,7 +37,7 @@ def messageReceiver():
         data = s.recv(1024)     # receive the response
         print("\n New Message :  " , pickle.loads(data) , " \n")
       except:
-        a=4
+        print("Some Error")
 
 def messageSender():
    
@@ -51,48 +51,8 @@ def messageSender():
    s.send(pickle.dumps(msg))
 
    while connected:
-       
-    #   numberOfOtion = input('Select the Number of an Option :  \n 1- Get Online List  \n 2- Send Message  \n 3- Send Broadcast \n 4- Quit  \n \n \n')
-      optionCommand = input('Enter Command  \n \n \n')
-
-      
-      if(optionCommand =="@Quit"):
-         msg = {}
-
-
-         msg['user'] = username
-         msg['type'] = 'quit'
-         s.send(pickle.dumps(dict(msg)))
-         s.close()
-         connected = False
-      elif(optionCommand =="@All"):
-         
-         # Broadcasting Messages 
-         
-         message = input('Enter Message :  \n')
-         msg = {}
-         msg['sender'] = username
-         msg['message'] = message
-         msg['type'] = 'ALL'
-         s.send(pickle.dumps(msg))
-
-      elif(optionCommand =="@List"):
-         msg = {}
-         msg['type'] = 'List'
-         s.send(pickle.dumps(msg))
-      elif(optionCommand =="@Chat"):
-         
-         # Send chat One To One Message
-          
-         userReceiver = input('Enter Target  Client ID  :\n')
-          
-         message = input('Enter Message :  \n')
-         msg = {}
-         msg['sender'] = username
-         msg['target'] = userReceiver
-         msg['message'] = message
-         msg['type'] = 'SERVER'
-         s.send(pickle.dumps(msg))
+      time.sleep(2)
+   
 
 def alivePing():
    
