@@ -2,38 +2,71 @@ version: '3.7'
 services:
     app_node1:
         image: gameserver
+        build: 
+            dockerfile: ./pythonDockerfile
         hostname: app_node1
+        environment:
+            - serverPort=5000
         depends_on:
             - redis
+        ports:
+            - 5000:5000
+        networks:
+          vpcbr:
+            ipv4_address: 10.5.0.5
 
     app_node2:
         image: gameserver
+        build: 
+            dockerfile: ./pythonDockerfile
         hostname: app_node2
+        environment:
+            - serverPort=5001
         depends_on:
             - redis
+        ports:
+            - 5001:5001
+        networks:
+          vpcbr:
+            ipv4_address: 10.5.0.6
 
     app_node3:
         image: gameserver
+        build: 
+            dockerfile: ./pythonDockerfile
         hostname: app_node3
+        environment:
+            - serverPort=5002
         depends_on:
             - redis
+        ports:
+            - 5002:5002
+        networks:
+          vpcbr:
+            ipv4_address: 10.5.0.7
 
     redis:
         image: redis
         ports:
             - 6379:6379
+        networks:
+          vpcbr:
+            ipv4_address: 10.5.0.8
         volumes:
             - redisData:/data
 
 
 
-    nginx:
+    loadbalancer:
         image: loadbalancer
-        hostname: nginx
+        hostname: loadbalancer
+        build: 
+            dockerfile: haDockerfile
         ports:
-            - "80:80"
-            - "443:443"
-            - "5000:5000"
+            - "4000:4000"
+        networks:
+          vpcbr:
+            ipv4_address: 10.5.0.9
         depends_on:
             - app_node1
             - app_node2
@@ -41,3 +74,12 @@ services:
 volumes:
   redisData:
     external: false
+
+
+networks:
+  vpcbr:
+    driver: bridge
+    ipam:
+     config:
+       - subnet: 10.5.0.0/16
+         gateway: 10.5.0.1

@@ -4,54 +4,60 @@ import threading
 import pickle
 import random
 import redis
-
+import os
 
 channel = "gameXO"
 HOST = '0.0.0.0'
-PORT = 5000
+PORT = int(os.environ['serverPort'])
+# PORT = 5000
+
+
 r = redis.from_url('redis://redis:6379')
 
- 
-def getOnlineList():
-  return ""
+# r = redis.from_url('redis://127.0.0.1:6379')
 
-def addUserToOnlineList():
-  return ""
-
-def removeUserFromOnlineList():
-  return ""
+serverId = random.randint(1, 900)
 
 SIZE = 1024
 FORMAT = "UTF-8"
 DISCONNECT_MSG = "close"
 
-clientList = {}
-clientTTL = {}
-onelineUser = []
-
-lock = threading.Lock()
-
-
 
 def handle_client(conn, addr):
     print(f"[NEW CONNECTION] {addr} connected.")
 
-    conn.close()
 
+    connected = True
+    connectedUser = ""
 
+    while connected:
+        
+        try:
+          msg = conn.recv(SIZE)
+        except:
+           print("connection is lost : ", connectedUser)
+           connected = False
+           conn.close()
+           
 
-def sendBroadcastMsg(messageToPublish):
+def sendBroadcastMsg(msg):
    
-   r.publish(channel , messageToPublish)
-   print(r.get("1"))
+   r.publish(channel ,pickle.dumps(msg) )
 
 def listenToMsg():
 
    pubsub = r.pubsub()
    pubsub.subscribe(channel)
    for message in pubsub.listen():
-        print(message)
-
+        type = message['type']
+        if type != "message":
+           print(message)
+        else:
+           msg = pickle.loads(message['data'])
+           if int(msg['sender']) != int(serverId):
+              print(msg)
+        
+           
 
 def aliveChecker():
    
@@ -61,11 +67,12 @@ def aliveChecker():
     
 def main():
   
-  print("App is startred")
+  tmp = "server is startred Id: " + str(serverId) + "   Port: " + str(PORT)
+  print(tmp)
   
   s = socket(AF_INET, SOCK_STREAM)
   s.bind((HOST, PORT))
-  s.listen(1)
+  s.listen(5)
   while True:
     (conn, addr) = s.accept()  # returns new socket and addr. client 
     thread = threading.Thread(target=handle_client, args=(conn, addr))
@@ -79,11 +86,17 @@ def main():
 if __name__ == "__main__":
   print(r.ping())
   r.set("1","Ali")
+
   listner = threading.Thread(target=listenToMsg)
   listner.start()
 
   time.sleep(3)
-  msg = "Hi everyone"
+
+  msg = {}
+
+  msg['sender'] = serverId
+  msg['data'] = "Hello"
+
 
   sendBroadcastMsg(msg)
   main()

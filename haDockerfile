@@ -1,0 +1,4 @@
+FROM haproxy
+USER root
+COPY haproxy.cfg /usr/local/etc/haproxy/haproxy.cfg
+RUN echo "" >> /usr/local/etc/haproxy/haproxy.cfg

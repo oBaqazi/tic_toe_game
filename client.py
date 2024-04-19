@@ -7,10 +7,10 @@ import string
 
 
 
-# In the Code bellow connection is established  and random username is genreated 
+
 
 HOST = 'localhost'
-PORT = 5000
+PORT = 4000
 
 s = socket(AF_INET, SOCK_STREAM)
 s.connect((HOST, PORT)) 
@@ -35,9 +35,9 @@ def messageReceiver():
        
       try: 
         data = s.recv(1024)     # receive the response
-        print("\n New Message :  " , pickle.loads(data) , " \n")
-      except:
-        print("Some Error")
+        print("\n New Message :  " , data , " \n")
+      except Exception as e:
+        print(e)
 
 def messageSender():
    
@@ -94,4 +94,6 @@ def main():
 
 if __name__ == "__main__":
   main()
+
+
 
