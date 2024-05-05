@@ -6,15 +6,17 @@ import random
 import redis
 import os
 
+
+connectedList = []
 channel = "gameXO"
 HOST = '0.0.0.0'
-PORT = int(os.environ['serverPort'])
-# PORT = 5000
+# PORT = int(os.environ['serverPort'])
+PORT = 5000
 
 
-r = redis.from_url('redis://redis:6379')
+# r = redis.from_url('redis://redis:6379')
 
-# r = redis.from_url('redis://127.0.0.1:6379')
+r = redis.from_url('redis://127.0.0.1:6379')
 
 serverId = random.randint(1, 900)
 
@@ -26,25 +28,59 @@ DISCONNECT_MSG = "close"
 def handle_client(conn, addr):
     print(f"[NEW CONNECTION] {addr} connected.")
 
-
     connected = True
-    connectedUser = ""
-
-    while connected:
-        
+    username = ""
+    connectedUser = {}
+    
+    while connected:        
         try:
           msg = conn.recv(SIZE)
-        except:
-           print("connection is lost : ", connectedUser)
+          msg = pickle.loads(msg)
+
+          if msg["type"] == "ping":
+             print(f"{addr} connection is a live.")
+             connectedUser["ttl"] = time.time()
+             r.set(f"user:{username}",serverId,3)
+
+          elif msg["type"] == "onlineUsers":
+             keys = []
+             for key in r.scan_iter("*user:*"):
+                key = key.decode("utf-8")
+                userId = key.replace("user:", '')
+                keys.append(userId)
+             conn.send(pickle.dumps(keys))
+
+          elif msg["type"] == "gameUpdate":
+             msgPublisher(msg)
+                
+
+          elif msg["type"] == "connection":
+             
+             username = msg["sender"]
+             connectedUser['username'] = username
+             connectedUser['conn'] = conn
+             connectedUser['addr'] = addr
+             connectedUser["ttl"] = time.time()
+             connectedList.append(connectedUser)
+             r.set(f"user:{username}",serverId,3)
+
+             
+           
+        except Exception as e:
+           print("exception in connection  : ", e)
            connected = False
            conn.close()
+        
+        
            
-
-def sendBroadcastMsg(msg):
-   
+def msgPublisher(msg):
    r.publish(channel ,pickle.dumps(msg) )
 
-def listenToMsg():
+def msgPublisher(msg):
+   r.publish(channel ,pickle.dumps(msg) )
+
+
+def msgSubscriber():
 
    pubsub = r.pubsub()
    pubsub.subscribe(channel)
@@ -54,17 +90,32 @@ def listenToMsg():
            print(message)
         else:
            msg = pickle.loads(message['data'])
-           if int(msg['sender']) != int(serverId):
-              print(msg)
-        
-           
+           for user in connectedList:
+              if user["username"] == msg["recipient"]:
+                 conn = user["conn"]
+                 conn.send(pickle.dumps(msg))
+           print(msg)
+         #   if int(msg['sender']) != int(serverId):
+         #      print(msg)
 
-def aliveChecker():
+
+def pingCheck():
    
    while True:
-      time.sleep(3)
-              
-    
+     
+     time.sleep(3)
+     for i in range(len(connectedList)):
+        ttl = connectedList[i]["ttl"]
+
+        if (time.time() - ttl) > 3:
+           connectedList.pop(i)
+     print(connectedList)
+
+      
+           
+           
+        
+               
 def main():
   
   tmp = "server is startred Id: " + str(serverId) + "   Port: " + str(PORT)
@@ -78,17 +129,16 @@ def main():
     thread = threading.Thread(target=handle_client, args=(conn, addr))
     thread.start()
 
-    threadAlive = threading.Thread(target=aliveChecker)
-    threadAlive.start()
-
-
-
 if __name__ == "__main__":
   print(r.ping())
-  r.set("1","Ali")
 
-  listner = threading.Thread(target=listenToMsg)
+
+  listner = threading.Thread(target=msgSubscriber)
   listner.start()
+
+  pingChecker = threading.Thread(target=pingCheck)
+  pingChecker.start()
+
 
   time.sleep(3)
 
@@ -98,5 +148,5 @@ if __name__ == "__main__":
   msg['data'] = "Hello"
 
 
-  sendBroadcastMsg(msg)
+  msgPublisher(msg)
   main()
