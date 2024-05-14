@@ -107,21 +107,35 @@ def handle_client(conn, addr):
              gameId = random.randrange(1, 10000)
              game = TicTacToe(gameId,connectedUser["username"], msg["recipient"])
              r.set(f"game:{gameId}",pickle.dumps(game))
+             game = pickle.loads(r.get(f"game:{gameId}"))
              publishMsg = {}
              tmpGame = {}
-             tmpGame["id"] = gameId
+             tmpGame["id"] = game.gameId
              tmpGame["player1"] = game.player1
              tmpGame["player2"] = game.player2
-             tmpGame["board"] = game.print_board()
+             tmpGame["board"] = game.board
              publishMsg["data"] = tmpGame
              publishMsg["recipient"] = msg["recipient"]
              publishMsg["type"] = "gameUpdate"
              msgPublisher(publishMsg)
 
-          elif msg["type"] == "gameUpdate":
-             msgPublisher(msg)
-                
-
+          elif msg["type"] == "play":
+             gameId = msg["gameId"]
+             game = pickle.loads(r.get(f"game:{gameId}"))
+             game.board[int(msg["x"])][int(msg["y"])] = msg["letter"]
+             r.set(f"game:{game.gameId}",pickle.dumps(game))
+             game = pickle.loads(r.get(f"game:{game.gameId}"))
+             publishMsg = {}
+             tmpGame = {}
+             tmpGame["id"] = game.gameId
+             tmpGame["player1"] = game.player1
+             tmpGame["player2"] = game.player2
+             tmpGame["board"] = game.board
+             publishMsg["data"] = tmpGame
+             publishMsg["recipient"] = msg["recipient"]
+             publishMsg["type"] = "gameUpdate"
+             msgPublisher(publishMsg)
+               
           elif msg["type"] == "connection":
              
              username = msg["sender"]
@@ -156,8 +170,16 @@ def msgSubscriber():
            print("")
         else:
            msg = pickle.loads(message['data'])
-           for user in connectedList:
-              if user["username"] == msg["recipient"]:
+           if msg["type"] == "gameUpdate":
+             play1 = msg["data"]["player1"]
+             play2 = msg["data"]["player2"]
+             for user in connectedList:
+               if user["username"] == play1 or user["username"] == play2:
+                 conn = user["conn"]
+                 conn.send(pickle.dumps(msg))
+           else:
+             for user in connectedList:
+               if user["username"] == msg["recipient"]:
                  conn = user["conn"]
                  conn.send(pickle.dumps(msg))
            print(msg)
@@ -210,6 +232,7 @@ if __name__ == "__main__":
 
   msg['sender'] = serverId
   msg['data'] = "Hello"
+  msg['type'] = "test"
 
 
   msgPublisher(msg)

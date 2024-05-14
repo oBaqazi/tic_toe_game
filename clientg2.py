@@ -6,8 +6,10 @@ import pickle
 
 name = None
 client_socket = None
+game = {}
 
 name = input("Enter your name: ")
+letter = input("Enter your letter: ")
 
 def client_program():
     global client_socket
@@ -26,6 +28,10 @@ def client_program():
              
               message = pickle.loads(message)
               if "gameUpdate" == message["type"]:
+                game["id"] = message['data']["id"]
+                game["player1"] = message['data']["player1"]
+                game["player2"] = message['data']["player2"]
+                game["board"] = message['data']["board"]
                 print(f"\n{message['data']}\n")
 
               if "onlineUsers" == message["type"]:
@@ -41,15 +47,6 @@ def client_program():
 
               if "Play Request" == message["data"]:
                 print()
-
-                
-              elif "Input move" == message["data"]:
-                # Handle move input
-                move = input("Enter your move (row,col): ")
-                client_socket.send(move.encode("utf-8"))
-
-              elif message["data"] == "gameUpdate":
-                print(message)
                 
               elif "wins" == message["data"] or "tie" == message["data"]:
                 # End of game
@@ -78,8 +75,10 @@ def alivePing():
 
 def messageSender():
     
+    global letter
     sendMsg = {}
     sendMsg['sender'] = name
+    global game
     while True:
        time.sleep(2)
        
@@ -93,10 +92,17 @@ def messageSender():
           opponent = input('Enter your oppoenet : ')
           sendMsg["recipient"] = opponent
        elif command == "play":
-          move = input('Enter a move : ')
-          
-      
-       
+          move = input("Enter your move row,col : ")
+          move = move.split(",")
+          x = move[0]
+          y = move[1]
+          sendMsg["x"] = x
+          sendMsg["y"] = y
+          sendMsg["gameId"] = game["id"]
+          sendMsg["letter"] = letter
+          sendMsg['type'] = command
+          sendMsg["recipient"] = ""
+
        client_socket.send(pickle.dumps(sendMsg))
 
 if __name__ == '__main__':
