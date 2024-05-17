@@ -59,11 +59,17 @@ class TicTacToe:
         diagonal2 = all([self.board[i][2 - i] == letter for i in range(3)]) if row_ind + col_ind == 2 else False
         return row or col or diagonal1 or diagonal2
 
-    def is_full(self):
-        return all([self.board[i][j] != ' ' for i in range(3) for j in range(3)])
-    
+def checkWinner(row_ind, col_ind , letter,board):
+        row_ind = row_ind
+        col_ind = col_ind
+        row = all([board[row_ind][i] == letter for i in range(3)])
+        col = all([board[i][col_ind] == letter for i in range(3)])
+        diagonal1 = all([board[i][i] == letter for i in range(3)]) if row_ind == col_ind else False
+        diagonal2 = all([board[i][2 - i] == letter for i in range(3)]) if row_ind + col_ind == 2 else False
+        return row or col or diagonal1 or diagonal2
 
-
+def is_full(board):
+      return all([board[i][j] != ' ' for i in range(3) for j in range(3)])
 
 
 
@@ -131,9 +137,15 @@ def handle_client(conn, addr):
              tmpGame["player1"] = game.player1
              tmpGame["player2"] = game.player2
              tmpGame["board"] = game.board
+             winnerStatus = checkWinner(int(msg["x"]),int(msg["y"]),msg["letter"],game.board)
+             isfull = is_full(game.board)
+             tmpGame["winner"] = winnerStatus
+             tmpGame["full"] = isfull
              publishMsg["data"] = tmpGame
              publishMsg["recipient"] = msg["recipient"]
              publishMsg["type"] = "gameUpdate"
+             
+          
              msgPublisher(publishMsg)
                
           elif msg["type"] == "connection":
