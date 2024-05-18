@@ -1,135 +1,329 @@
-import socket
+from socket  import *
+import time
 import threading
+import pickle
+import random
+import redis
+import os
+
+
+
+connectedList = []
+channel = "gameXO"
+HOST = '0.0.0.0'
+PORT = int(os.environ['serverPort'])
+# PORT = 4000
+
+
+r = redis.from_url('redis://redis:6379')
+
+# r = redis.from_url('redis://127.0.0.1:6379')
+
+serverId = random.randint(1, 900)
+
+SIZE = 1024
+FORMAT = "UTF-8"
+DISCONNECT_MSG = "close"
+
 
 class TicTacToe:
-    def __init__(self):
-        self.board = [[' ' for _ in range(3)] for _ in range(3)]
-        self.current_winner = None
-        self.player1 
+  def __init__(self,gameId,player1,player2):
+    self.gameId = gameId
+    self.board = [[' ' for _ in range(3)] for _ in range(3)]
+    self.current_winner = None
+    self.player1 = player1
+    self.player2 = player2
+    self.whosTurn = player1
+    self.winner_player = None
 
-    def print_board(self):
-        board_str = "  0 1 2\n"
-        for i, row in enumerate(self.board):
-            board_str += f"{i} " + '| ' + ' | '.join(row) + ' |\n'
-        return board_str
+  def print_board(self):
+    board_str = "    0   1   2\n"
+    for i, row in enumerate(self.board):
+        board_str += f"{i} " + '| ' + ' | '.join(row) + ' |\n'
+    return board_str
 
-    def available_moves(self):
-        return [(i, j) for i in range(3) for j in range(3) if self.board[i][j] == ' ']
+  def available_moves(self):
+    return [(i, j) for i in range(3) for j in range(3) if self.board[i][j] == ' ']
 
-    def make_move(self, position, letter):
-        if self.board[position[0]][position[1]] == ' ':
-            self.board[position[0]][position[1]] = letter
-            if self.winner(position, letter):
-                self.current_winner = letter
-            return True
-        return False
+  def make_move(self, position, letter):
+    if self.board[position[0]][position[1]] == ' ':
+        self.board[position[0]][position[1]] = letter
+        if self.winner(position, letter):
+            self.current_winner = letter
+            self.winner_player = self.whosTurn
+        return True
+    return False
 
-    def winner(self, position, letter):
-        row_ind, col_ind = position
-        row = all([self.board[row_ind][i] == letter for i in range(3)])
-        col = all([self.board[i][col_ind] == letter for i in range(3)])
-        diagonal1 = all([self.board[i][i] == letter for i in range(3)]) if row_ind == col_ind else False
-        diagonal2 = all([self.board[i][2 - i] == letter for i in range(3)]) if row_ind + col_ind == 2 else False
-        return row or col or diagonal1 or diagonal2
+  def winner(self, position, letter):
+    row_ind, col_ind = position
+    row = all([self.board[row_ind][i] == letter for i in range(3)])
+    col = all([self.board[i][col_ind] == letter for i in range(3)])
+    diagonal1 = all([self.board[i][i] == letter for i in range(3)]) if row_ind == col_ind else False
+    diagonal2 = all([self.board[i][2 - i] == letter for i in range(3)]) if row_ind + col_ind == 2 else False
+    return row or col or diagonal1 or diagonal2
 
-    def is_full(self):
-        return all([self.board[i][j] != ' ' for i in range(3) for j in range(3)])
+  def is_full(self):
+    return all([self.board[i][j] != ' ' for i in range(3) for j in range(3)])
+    
+  def is_running(self):
+    return not self.is_full() and self.current_winner == None
+    
+  def next_turn(self):
+    if self.whosTurn == self.player1:
+      self.whosTurn = self.player2
+    else:
+      self.whosTurn = self.player1
+    
 
-class NetworkPlayer:
-    def __init__(self, letter, client_socket, name):
-        self.letter = letter
-        self.client_socket = client_socket
-        self.name = name
+def handle_client(conn, addr):
+    print(f"[NEW CONNECTION] {addr} connected.")
 
-    def get_move(self, game):
-        valid_square = False
-        val = None
-        while not valid_square:
-            try:
-                self.client_socket.send("Input move (row,col): ".encode("utf-8"))
-                square = self.client_socket.recv(1024).decode("utf-8")
-                val = tuple(int(num) for num in square.split(','))
-                if val in game.available_moves():
-                    valid_square = True
-                else:
-                    self.client_socket.send("Invalid move. Try again.".encode("utf-8"))
-            except (ValueError, ConnectionResetError, socket.error):
-                self.client_socket.send("Invalid move. Try again.".encode("utf-8"))
-        return val
+    firstMsg = {}
+    firstMsg["data"]= "Welcome to Tic Tac Toe!"
+    firstMsg["type"]= "connection"
+    conn.send(pickle.dumps(firstMsg))
 
-def play(game, x_player, o_player):
-    current_player = x_player
-    other_player = o_player
-    letter = 'X'
+  
 
-    while game.current_winner is None and not game.is_full():
+    connected = True
+    username = ""
+    connectedUser = {}
+    
+    while connected:        
         try:
-            # Send current game board to both players
-            board_state = game.print_board().encode("utf-8")
-            x_player.client_socket.sendall(board_state)
-            o_player.client_socket.sendall(board_state)
+          msg = conn.recv(SIZE)
+          msg = pickle.loads(msg)
+          print("Receveic :")
+          print(msg)
 
-            # Request a move from the current player
-            prompt = f"It's your turn, {current_player.name} ({letter}).".encode("utf-8")
-            current_player.client_socket.sendall(prompt)
+          if msg["type"] == "ping":
+             connectedUser["ttl"] = time.time()
+             r.set(f"user:{username}",serverId,55)
 
-            # Get and validate the move
-            position = current_player.get_move(game)
-            if game.make_move(position, letter):
-                if game.current_winner:
-                    result = f"{letter} wins the game!\n".encode("utf-8")
-                    x_player.client_socket.sendall(result)
-                    o_player.client_socket.sendall(result)
-                    break
-                elif game.is_full():
-                    result = "The game is a tie!\n".encode("utf-8")
-                    x_player.client_socket.sendall(result)
-                    o_player.client_socket.sendall(result)
-                    break
-                # Switch players for the next turn
-                current_player, other_player = other_player, current_player
-                letter = 'O' if letter == 'X' else 'X'
+          elif msg["type"] == "onlineUsers":
+             sendMsg = {}
+             keys = []
+             for key in r.scan_iter("*user:*"):
+                key = key.decode("utf-8")
+                userId = key.replace("user:", '')
+                keys.append(userId)
+             sendMsg["type"] = "onlineUsers"
+             sendMsg["data"] = keys
+             conn.send(pickle.dumps(sendMsg))
+
+          elif msg["type"] == "Enter a Game":
+             keys = []
+             for key in r.scan_iter("*user:*"):
+                key = key.decode("utf-8")
+                userId = key.replace("user:", '')
+                keys.append(userId)
+             if msg['recipient'] in keys:
+              gameId = random.randrange(1, 10000)
+              game = TicTacToe(gameId,connectedUser["username"], msg["recipient"])
+              r.set(f"game:{gameId}",pickle.dumps(game))
+              r.set(f"{connectedUser['username']}", pickle.dumps(game))
+              game = pickle.loads(r.get(f"game:{gameId}"))
+              publishMsg = {}
+              tmpGame = {}
+              tmpGame["id"] = game.gameId
+              tmpGame["player1"] = game.player1
+              tmpGame["player2"] = game.player2
+              tmpGame["board"] = game.print_board()
+              tmpGame['is_running'] = game.is_running()
+              tmpGame['whos_turn'] = game.whosTurn
+              tmpGame["message"] = f"Game created for {game.player1} vs {game.player2}"
+              tmpGame["status"] = "created"
+              publishMsg["data"] = tmpGame
+              publishMsg["recipient"] = msg["recipient"]
+              publishMsg["type"] = "gameUpdate"
+              msgPublisher(publishMsg)
+             else:
+              publishMsg = {}
+              publishMsg["message"] = "Player does not exist"
+              msgPublisher(publishMsg)
+              conn.send(pickle.dumps(publishMsg))
+
+
+          elif msg["type"] == "play":
+            r.set(msg["sender"], "Ready", 50)
+            publishMsg = {}
+            gameId = msg["gameId"]
+            game = pickle.loads(r.get(f"game:{gameId}"))
+            p1status = r.get(game.player1)
+            p2status = r.get(game.player2)
+            if p1status is not None and p1status.decode('utf-8') == "Ready" and p2status is not None and p2status.decode('utf-8') == "Ready":
+              msgString = f"Its {game.whosTurn}'s turn"
+              tmpGame = {}
+              tmpGame["id"] = game.gameId
+              tmpGame["player1"] = game.player1
+              tmpGame["player2"] = game.player2
+              tmpGame["board"] = game.print_board()
+              tmpGame['is_running'] = game.is_running()
+              tmpGame['whos_turn'] = game.whosTurn
+              tmpGame["message"] = msgString
+              tmpGame["status"] = "ready"
+              publishMsg["data"] = tmpGame
+              publishMsg["recipient"] = msg["recipient"]
+              publishMsg["type"] = "gameUpdate"
             else:
-                current_player.client_socket.sendall("Invalid move. Please try again.\n".encode("utf-8"))
+              tmpGame = {}
+              tmpGame["id"] = game.gameId
+              tmpGame["player1"] = game.player1
+              tmpGame["player2"] = game.player2
+              tmpGame["board"] = game.print_board()
+              tmpGame['is_running'] = game.is_running()
+              tmpGame['whos_turn'] = game.whosTurn
+              tmpGame["message"] = "Waiting for both players to start using 'play' command"
+              tmpGame["status"] = "awaiting"
+              publishMsg["data"] = tmpGame
+              publishMsg["recipient"] = msg["recipient"]
+              publishMsg["type"] = "gameUpdate"
+            msgPublisher(publishMsg)
+            
+          elif msg["type"] == "playing":
+            publishMsg = {}
+            gameId = msg["gameId"]
+            game = pickle.loads(r.get(f"game:{gameId}"))
+            msgString = f"Its {game.whosTurn}'s turn"
+            tmpGame = {}
+            tmpGame["status"] = "playing"
+            result = game.make_move(list([int(msg['x']), int(msg['y'])]), msg['letter'])
+            if result == True:
+              game.next_turn()
+              msgString = f"Its {game.whosTurn}'s turn"
+              tmpGame["message"] = msgString
+              if game.current_winner is not None:
+               tmpGame["message"] = f"{game.winner_player} is the winner"
+               tmpGame["status"] = "ended"
+              elif game.current_winner is None and game.is_full():
+               tmpGame["message"] = f"Game is tie"
+               tmpGame["status"] = "ended"
+            else:
+               if game.current_winner is not None:
+                 tmpGame["message"] = f"{game.winner_player} is the winner"
+                 tmpGame["status"] = "ended"
+               elif game.current_winner is None and game.is_full():
+                 tmpGame["message"] = f"Game is tie"
+                 tmpGame["status"] = "ended"
+               else:
+                tmpGame["message"] = "Invalid move, try again "
+            # game.board[int(msg["x"])][int(msg["y"])] = msg["letter"]
+            r.set(f"game:{game.gameId}",pickle.dumps(game))
+            game = pickle.loads(r.get(f"game:{game.gameId}"))
+            tmpGame["id"] = game.gameId
+            tmpGame["player1"] = game.player1
+            tmpGame["player2"] = game.player2
+            tmpGame["board"] = game.print_board()
+            tmpGame['is_running'] = game.is_running()
+            tmpGame['whos_turn'] = game.whosTurn
+            publishMsg["data"] = tmpGame
+            publishMsg["recipient"] = msg["recipient"]
+            publishMsg["type"] = "gameUpdate"
+            msgPublisher(publishMsg)
+              
+          elif msg["type"] == "connection":
+             
+             username = msg["sender"]
+             connectedUser['username'] = username
+             connectedUser['conn'] = conn
+             connectedUser['addr'] = addr
+             connectedUser["ttl"] = time.time()
+             connectedUser['is_playing'] = False
+             connectedList.append(connectedUser)
+             r.set(f"user:{username}",serverId,3)
+          elif msg['type'] == "exit":
+             for i in range(len(connectedList)):
+              usr = connectedList[i]["username"]
+              if usr == msg["sender"]:
+                connectedList.pop(i)
+             
+           
+        except Exception as e:
+           print("exception in connection  : ", e)
+           connected = False
+           conn.close()
+        
+        
+           
+def msgPublisher(msg):
+   r.publish(channel ,pickle.dumps(msg) )
+   
 
-        except socket.error as e:
-            print(f"Network error: {e}")
-            break
 
-    return "Game Over"
+def msgSubscriber():
 
-def handle_client(conn, addr, player_list):
-    print(f"New connection from {addr}")
-    conn.send("Welcome to Tic Tac Toe!".encode("utf-8"))
-    name = conn.recv(1024).decode("utf-8")
-    player_list.append(NetworkPlayer("X" if len(player_list) % 2 == 0 else "O", conn, name))
-    if len(player_list) % 2 == 0:
-        game = TicTacToe()
-        play(game, player_list[-2], player_list[-1])
+   pubsub = r.pubsub()
+   pubsub.subscribe(channel)
+   for message in pubsub.listen():
+        type = message['type']
+        if type != "message":
+           print("")
+        else:
+           msg = pickle.loads(message['data'])
+           if msg["type"] == "gameUpdate":
+             play1 = msg["data"]["player1"]
+             play2 = msg["data"]["player2"]
+             for user in connectedList:
+               if user["username"] == play1 or user["username"] == play2:
+                 conn = user["conn"]
+                 conn.send(pickle.dumps(msg))
+           else:
+             for user in connectedList:
+               if user["username"] == msg["recipient"]:
+                 conn = user["conn"]
+                 conn.send(pickle.dumps(msg))
+           print(msg)
 
-def server_program():
-    host = "127.0.0.1"
-    port = 5000
 
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server_socket.bind((host, port))
-    server_socket.listen()
 
-    print("Waiting for connections...")
 
-    player_list = []
+def pingCheck():
+   
+   while True:
+     
+     time.sleep(50)
+     for i in range(len(connectedList)):
+        ttl = connectedList[i]["ttl"]
 
-    try:
-        while True:
-            conn, addr = server_socket.accept()
+        if (time.time() - ttl) > 60:
+           connectedList.pop(i)
 
-            client_handler = threading.Thread(target=handle_client, args=(conn, addr, player_list))
-            client_handler.start()
+      
+           
+           
+        
+               
+def main():
+  
+  tmp = "server is startred Id: " + str(serverId) + "   Port: " + str(PORT)
+  print(tmp)
+  
+  s = socket(AF_INET, SOCK_STREAM)
+  s.bind((HOST, PORT))
+  s.listen(5)
+  while True:
+    (conn, addr) = s.accept()  # returns new socket and addr. client 
+    thread = threading.Thread(target=handle_client, args=(conn, addr))
+    thread.start()
 
-    except KeyboardInterrupt:
-        print("Server shutting down...")
-        server_socket.close()
+if __name__ == "__main__":
 
-if __name__ == '__main__':
-    server_program()
+
+  listner = threading.Thread(target=msgSubscriber)
+  listner.start()
+
+  pingChecker = threading.Thread(target=pingCheck)
+  pingChecker.start()
+
+
+  time.sleep(3)
+
+  msg = {}
+
+  msg['sender'] = serverId
+  msg['data'] = "Hello"
+  msg['type'] = "test"
+
+
+  msgPublisher(msg)
+  main()
