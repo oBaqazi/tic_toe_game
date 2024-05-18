@@ -2,7 +2,7 @@ import socket
 import time
 import threading
 import pickle
-
+import sys
 
 name = None
 client_socket = None
@@ -27,17 +27,29 @@ def client_program():
             try:
              
               message = pickle.loads(message)
-              if "gameUpdate" == message["type"]:
+              if "message" in message:
+                print(f"\n{message['message']}\n")
+
+              elif "gameUpdate" == message["type"]:
                 game["id"] = message['data']["id"]
                 game["player1"] = message['data']["player1"]
                 game["player2"] = message['data']["player2"]
                 game["board"] = message['data']["board"]
+                game["is_running"] = message['data']['is_running']
+                game['whos_turn'] = message['data']['whos_turn']
+                game["message"] = message['data']['message']
+                game['status'] = message["data"]["status"]
+                if message['data']['status'] not in ["ready", "playing", "ended"]:
+                   print(game["message"])
+                else:
+                  print("")
+                  print(game["board"])
+                  print(game["message"])
+
+              elif "onlineUsers" == message["type"]:
                 print(f"\n{message['data']}\n")
 
-              if "onlineUsers" == message["type"]:
-                print(f"\n{message['data']}\n")
-
-              if "Welcome to Tic Tac Toe!" == message["data"]:
+              elif "Welcome to Tic Tac Toe!" == message["data"]:
                 print("Welcome to Tic Tac Toe!")
                 # Handle name input
                 msg = {}
@@ -45,14 +57,14 @@ def client_program():
                 msg['type'] = 'connection'
                 client_socket.send(pickle.dumps(msg))
 
-              if "Play Request" == message["data"]:
+              elif "Play Request" == message["data"]:
                 print()
                 
               elif "wins" == message["data"] or "tie" == message["data"]:
                 # End of game
                 break
             except Exception as e:
-                print(e)
+                print("Exception: " + e.__str__())
 
 
                 
@@ -65,8 +77,7 @@ def client_program():
 def alivePing():
    
    while True:
-      
-     time.sleep(1)
+     time.sleep(10)
      pingMsg = {}
      pingMsg['sender'] = name
      pingMsg['type'] = 'ping'
@@ -79,29 +90,54 @@ def messageSender():
     sendMsg = {}
     sendMsg['sender'] = name
     global game
+    game = {}
     while True:
-       time.sleep(2)
-       
-
+       time.sleep(1)
        command = input('Enter your Command : ')
-
+       
        if command == "onlineUsers":
            sendMsg['type'] = command           
        elif command == "Enter a Game":
           sendMsg['type'] = command
-          opponent = input('Enter your oppoenet : ')
+          opponent = input('Enter your opponenet : ')
           sendMsg["recipient"] = opponent
        elif command == "play":
-          move = input("Enter your move row,col : ")
-          move = move.split(",")
-          x = move[0]
-          y = move[1]
-          sendMsg["x"] = x
-          sendMsg["y"] = y
-          sendMsg["gameId"] = game["id"]
-          sendMsg["letter"] = letter
-          sendMsg['type'] = command
-          sendMsg["recipient"] = ""
+          if game is {}:
+             print("Game not started yet, please use 'Enter a Game' command to start a game.")
+             sendMsg["type"] = ""
+          else:
+            sendMsg["gameId"] = game["id"]
+            sendMsg["letter"] = letter
+            sendMsg['type'] = command
+            sendMsg["recipient"] = ""
+            client_socket.send(pickle.dumps(sendMsg))
+            
+            while game["status"] != "ready":
+                  pass
+            
+            while game['is_running']:
+              if game["status"] == "ended":
+                 break
+              sendMsg["type"] = "playing"
+              if game["whos_turn"] == name:   
+                move = input("Enter your move row,col : ")
+                move = move.split(",")
+                x = move[0]
+                y = move[1]
+                sendMsg["x"] = x
+                sendMsg["y"] = y
+                client_socket.send(pickle.dumps(sendMsg))
+              time.sleep(2)
+              
+       elif command == "quit" or command == "exit":
+          print("exiting...")
+          sendMsg["type"] = "exit"
+          client_socket.send(pickle.dumps(sendMsg))
+          client_socket.close()
+          sys.exit(0)
+       else:
+          print("Invalid input")
+          sendMsg["type"] = ''
 
        client_socket.send(pickle.dumps(sendMsg))
 
